@@ -137,7 +137,11 @@
                     {{ $errors->first() }}
                 </div>
             @endif
-
+@if(session('error'))
+    <div style="background-color: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+        <strong>GAGAL!</strong> {{ session('error') }}
+    </div>
+@endif
             <div class="form-group">
                 <input type="file" name="file" required accept=".txt,.json">
             </div>

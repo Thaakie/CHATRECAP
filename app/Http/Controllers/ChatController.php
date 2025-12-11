@@ -21,8 +21,14 @@ class ChatController extends Controller
         ini_set('memory_limit', '512M'); 
         ini_set('max_execution_time', 300);
 
-        $request->validate(['file' => 'required|mimetypes:text/plain,text/*']);
-        $content = file_get_contents($request->file('file')->getRealPath());
+        $request->validate(['file' => 'required|file|mimetypes:text/plain,text/*']);
+        
+        // Baca file
+        try {
+            $content = file_get_contents($request->file('file')->getRealPath());
+        } catch (\Exception $e) {
+            return redirect()->back()->with('error', 'Gagal membaca file. Pastikan file tidak rusak.');
+        }
         
         // Normalize newlines
         $lines = preg_split('/\r\n|\r|\n/', $content);
@@ -278,9 +284,10 @@ class ChatController extends Controller
             $prevSender = $sender;
         }
 
-        // --- CHECK IF DATA IS EMPTY ---
+        // --- CHECK IF DATA IS EMPTY (INI YANG DIBENERIN) ---
         if (count($messages) === 0) {
-            dd("OOPS! Data masih 0. Format chat tidak dikenali.", array_slice($lines, 0, 10));
+            // JANGAN PAKAI dd() DISINI
+            return redirect()->back()->with('error', 'OOPS! Data masih 0. Format chat tidak dikenali. Pastikan Anda mengupload file .txt hasil Export Chat WhatsApp (Tanpa Media/Without Media) atau Discord.');
         }
 
         // --- SORTING ---
@@ -438,14 +445,14 @@ class ChatController extends Controller
 
         // AI GROQ
         $aiResult = ['summary'=>'AI Error/Limit.', 'personality'=>'Misterius', 'caption'=>'#Wrapped', 'inside_joke'=>'-', 'roast'=>'Grup biasa aja.', 'theme_song'=>'Hening Cipta', 'prediction_2026'=>'Sepi.'];
-        $apikey = env('GROQ_API_KEY');
+        $apiKey = env('GROQ_API_KEY');
         $chatSample = array_slice($messages, -80); 
         $textToSend = "";
         foreach ($chatSample as $m) $textToSend .= $m['sender'] . ": " . $m['text'] . "\n";
         $topTopic = array_key_first($wordsMap) ?? 'Chat';
         $albumPrompt = "Album cover art featuring abstract representation of '$topTopic' with vibrant colors";
 
-        if (!empty($textToSend)) {
+        if (!empty($textToSend) && $apiKey) {
             try {
                 $prompt = "Analisis chat ini. Output JSON only. Keys: 'summary' (ringkasan), 'personality' (3 kata sifat), 'caption' (IG story), 'inside_joke' (frasa unik), 'roast' (ejekan pedas), 'theme_song' (lagu+artis), 'prediction_2026' (ramalan lucu). Log: $textToSend";
                 $response = Http::withoutVerifying()->withToken($apiKey)->post('https://api.groq.com/openai/v1/chat/completions', [
