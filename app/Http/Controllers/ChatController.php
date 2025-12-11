@@ -21,14 +21,8 @@ class ChatController extends Controller
         ini_set('memory_limit', '512M'); 
         ini_set('max_execution_time', 300);
 
-        $request->validate(['file' => 'required|file|mimetypes:text/plain,text/*']);
-        
-        // Baca file
-        try {
-            $content = file_get_contents($request->file('file')->getRealPath());
-        } catch (\Exception $e) {
-            return redirect()->back()->with('error', 'Gagal membaca file. Pastikan file tidak rusak.');
-        }
+        $request->validate(['file' => 'required|mimetypes:text/plain,text/*']);
+        $content = file_get_contents($request->file('file')->getRealPath());
         
         // Normalize newlines
         $lines = preg_split('/\r\n|\r|\n/', $content);
@@ -93,21 +87,53 @@ class ChatController extends Controller
             'gosip' => ['dia', 'si itu', 'tau gak', 'ternyata', 'katanya', 'mantan', 'pacar', 'putus', 'jadian', 'spill', 'hot news']
         ];
 
-        // --- STEP 1: PARSING & NORMALIZATION ---
+// --- STEP 1: PARSING & NORMALIZATION ---
         $chatData = [];
         $buffer = null;
+
+        // Bersihkan karakter strip aneh dari hasil copy-paste HP
+        $content = str_replace(['–', '—', '−'], '-', $content);
+        // Hapus karakter invisible yang sering bikin error regex
+        $content = preg_replace('/[\x00-\x1F\x7F\xA0]/u', ' ', $content);
+        $content = str_replace(["\u{202f}", "\u{00a0}", "\u{200e}", "\u{200f}"], ' ', $content);
 
         foreach ($lines as $line) {
             $line = trim($line);
             if (empty($line)) continue;
 
-            // Clean invisible chars
-            $line = preg_replace('/\x{202F}/u', ' ', $line);
-            $line = str_replace(["\u{00a0}", "\u{200e}", "\u{200f}"], ' ', $line);
-            $line = preg_replace('/[\x00-\x1F\x7F]/u', '', $line);
+            // 1. DETEKSI FORMAT UTAMA (HP KAMU)
+            // Pola: 21/06/24 19.22 - Nama: Pesan
+            // Regex ini menangkap: (Tanggal) (Jam.Menit) - (Sisanya)
+            if (preg_match('/^(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}\.\d{2})\s-\s(.*)$/', $line, $m)) {
+                
+                $dateRaw = $m[1];
+                $timeRaw = str_replace('.', ':', $m[2]); // Ubah 19.22 jadi 19:22 untuk sistem
+                $body    = $m[3]; // Isinya: "~Sajid: p" ATAU "Pesan terenkripsi..."
 
-            // DETEKSI FORMAT DISCORD: [07/03/2025 21:41] username
-            if (preg_match('/^\[(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\]\s+(.*)$/', $line, $m)) {
+                // Cek apakah ini pesan enkripsi/sistem (tidak ada titik dua ": " setelah nama)
+                if (str_contains($body, 'Pesan dan panggilan terenkripsi')) {
+                    continue; // SKIP pesan ini
+                }
+
+                // Cek apakah ini Chat beneran (Ada Nama Pengirim dan Tanda ": ")
+                if (preg_match('/^(.*?):\s(.*)$/', $body, $msgMatch)) {
+                    // Simpan pesan sebelumnya (buffer) ke array
+                    if ($buffer) $chatData[] = $buffer;
+
+                    // Buat buffer baru
+                    $buffer = [
+                        'dateRaw' => $dateRaw,
+                        'timeRaw' => $timeRaw,
+                        'sender'  => trim($msgMatch[1]), // Nama (~Sajid)
+                        'text'    => trim($msgMatch[2]), // Pesan (p)
+                        'format'  => 'wa'
+                    ];
+                } 
+                // Jika masuk sini tapi gak ada ":", berarti activity log (misal: "Sajid changed icon"), skip aja biar statistik gak rusak.
+            }
+
+            // 2. DETEKSI FORMAT DISCORD (Jaga-jaga)
+            elseif (preg_match('/^\[(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})\]\s+(.*)$/', $line, $m)) {
                 if ($buffer) $chatData[] = $buffer;
                 $buffer = [
                     'dateRaw' => $m[1],
@@ -117,28 +143,27 @@ class ChatController extends Controller
                     'format'  => 'discord'
                 ];
             }
-            // DETEKSI FORMAT WA: 6/29/25, 7:22 PM - Name: Msg
-            elseif (preg_match('/^(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}\s?[APap][Mm])\s*-\s*(.*?):\s*(.*)$/', $line, $m)) {
-                if ($buffer) $chatData[] = $buffer;
-                $buffer = null;
-                $chatData[] = ['dateRaw' => $m[1], 'timeRaw' => $m[2], 'sender' => $m[3], 'text' => $m[4], 'format' => 'wa'];
-            }
-            // DETEKSI FORMAT WA (Bracket)
-            elseif (preg_match('/^\[(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}\s?[APap][Mm]?)\]\s*(.*?):\s*(.*)$/', $line, $m)) {
-                if ($buffer) $chatData[] = $buffer;
-                $buffer = null;
-                $chatData[] = ['dateRaw' => $m[1], 'timeRaw' => $m[2], 'sender' => $m[3], 'text' => $m[4], 'format' => 'wa'];
-            }
-            // ISI PESAN
+
+            // 3. ISI PESAN (MULTILINE / KODINGAN / LINK)
             elseif ($buffer) {
-                if ($line === '{Stickers}' || str_contains($line, 'cdn.discordapp.com/stickers')) {
-                    $line = "sticker omitted"; 
-                } elseif (str_contains($line, 'cdn.discordapp.com/attachments')) {
-                    $line = "image omitted";
+                // Filter pesan sistem WA di baris sambungan
+                if (str_contains($line, 'Pesan dan panggilan terenkripsi')) continue;
+
+                // Normalisasi penanda media supaya terhitung di statistik
+                if (str_contains($line, '<Media tidak disertakan>') || str_contains($line, 'Media tidak disertakan')) {
+                    $line = "image omitted"; // Ubah ke keyword standar biar kehitung statistik gambar
                 }
-                $buffer['text'] .= " " . $line;
+
+                // GABUNGKAN PESAN
+                // Pakai "\n" (Enter) supaya kodingan C kamu tetap rapi ke bawah, bukan menyamping
+                if ($buffer['text'] === '') {
+                    $buffer['text'] = $line;
+                } else {
+                    $buffer['text'] .= "\n" . $line;
+                }
             }
         }
+        // Masukkan pesan terakhir
         if ($buffer) $chatData[] = $buffer;
 
         // --- STEP 2: ANALISIS ---
@@ -284,10 +309,9 @@ class ChatController extends Controller
             $prevSender = $sender;
         }
 
-        // --- CHECK IF DATA IS EMPTY (INI YANG DIBENERIN) ---
+        // --- CHECK IF DATA IS EMPTY ---
         if (count($messages) === 0) {
-            // JANGAN PAKAI dd() DISINI
-            return redirect()->back()->with('error', 'OOPS! Data masih 0. Format chat tidak dikenali. Pastikan Anda mengupload file .txt hasil Export Chat WhatsApp (Tanpa Media/Without Media) atau Discord.');
+            dd("OOPS! Data masih 0. Format chat tidak dikenali.", array_slice($lines, 0, 10));
         }
 
         // --- SORTING ---
@@ -445,14 +469,15 @@ class ChatController extends Controller
 
         // AI GROQ
         $aiResult = ['summary'=>'AI Error/Limit.', 'personality'=>'Misterius', 'caption'=>'#Wrapped', 'inside_joke'=>'-', 'roast'=>'Grup biasa aja.', 'theme_song'=>'Hening Cipta', 'prediction_2026'=>'Sepi.'];
-        $apiKey = env('GROQ_API_KEY');
+        $apikey = env('GROQ_API_KEY');
+
         $chatSample = array_slice($messages, -80); 
         $textToSend = "";
         foreach ($chatSample as $m) $textToSend .= $m['sender'] . ": " . $m['text'] . "\n";
         $topTopic = array_key_first($wordsMap) ?? 'Chat';
         $albumPrompt = "Album cover art featuring abstract representation of '$topTopic' with vibrant colors";
 
-        if (!empty($textToSend) && $apiKey) {
+        if (!empty($textToSend)) {
             try {
                 $prompt = "Analisis chat ini. Output JSON only. Keys: 'summary' (ringkasan), 'personality' (3 kata sifat), 'caption' (IG story), 'inside_joke' (frasa unik), 'roast' (ejekan pedas), 'theme_song' (lagu+artis), 'prediction_2026' (ramalan lucu). Log: $textToSend";
                 $response = Http::withoutVerifying()->withToken($apiKey)->post('https://api.groq.com/openai/v1/chat/completions', [
