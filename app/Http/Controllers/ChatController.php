@@ -77,7 +77,7 @@ class ChatController extends Controller
         $stopwords = ['yang', 'dan', 'di', 'ke', 'dari', 'ini', 'itu', 'aku', 'kamu', 'dia', 'kita', 'mereka', 'untuk', 'pada', 'adalah', 'sebagai', 'dengan', 'juga', 'karena', 'bahwa', 'tetapi', 'namun', 'atau', 'sudah', 'telah', 'sedang', 'akan', 'bisa', 'ada', 'tidak', 'tak', 'gak', 'ya', 'yah', 'ok', 'oke', 'yg', 'kalo', 'kalau', 'aja', 'saja', 'kok', 'sih', 'dong', 'deh', 'kan', 'mah', 'omitted', 'media', 'image', 'sticker', 'video', 'null', 'pesan', 'dihapus', 'missed', 'call', 'berakhir', 'hai', 'halo', 'bro', 'sis', 'kak', 'mas', 'mbak', 'pak', 'bu', 'dok', 'teruskan', 'forwarded', 'https', 'http', 'com', 'www', 'tuh', 'nih', 'deh', 'lah', 'doang', 'banget', 'bgt', 'gw', 'gue', 'lu', 'lo', 'apa', 'kenapa', 'gimana', 'kapan', 'tapi', 'bukan', 'sama', 'banyak', 'mau', 'ga', 'nggak', 'belom', 'belum'];
 
         $posWords = ['wkwk', 'haha', 'mantap', 'keren', 'makasih', 'love', 'bagus', 'selamat', 'alhamdulillah', 'gas', 'ayo', 'suka', 'rindu', 'kangen', 'baik', 'siap', 'oke', 'yoi', 'asik', 'bestie', 'gokil', 'wkwkwk'];
-        $negWords = ['anjing', 'babi', 'bangsat', 'tolol', 'bodoh', 'sedih', 'gila', 'stres', 'kampret', 'sial', 'benci', 'tai', 'setan', 'fuck', 'shit'];
+        $negWords = ['anjing', 'babi', 'bangsat', 'tolol', 'bodoh', 'sedih', 'gila', 'kampret', 'benci', 'tai', 'setan', 'fuck', 'shit'];
         $holyWords = ['maaf', 'makasih', 'terima kasih', 'tolong', 'mohon', 'alhamdulillah', 'insyaallah', 'assalamualaikum', 'syukur', 'sabar', 'amin', 'aamiin', 'semoga', 'nuhun', 'punten', 'shalom'];
         
         $topics = [

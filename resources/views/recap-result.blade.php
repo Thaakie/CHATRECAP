@@ -39,13 +39,66 @@
         #capture-area { background-color: var(--c-bg); padding: 30px; border-radius: 20px; }
 
         /* GRID SYSTEM */
-        .grid-wrapper { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; grid-auto-rows: minmax(100px, auto); }
-        .card { background-color: var(--c-card); border: 1px solid var(--c-accent); border-radius: 20px; padding: 25px; display: flex; flex-direction: column; justify-content: space-between; transition: transform 0.2s ease; position: relative; overflow: hidden; }
-        .card:hover { transform: translateY(-3px); border-color: var(--c-text); }
+        .grid-wrapper { 
+    display: grid; 
+    /* Desktop: 4 Kolom. 1fr artinya "1 bagian rata" */
+    grid-template-columns: repeat(4, 1fr); 
+    
+    /* Jarak antar kartu. 20px pas untuk desktop, jangan terlalu rapat */
+    gap: 24px; 
+    
+    /* Biar tinggi baris otomatis ngikutin konten, tapi minimal 140px biar ga gepeng */
+    grid-auto-rows: minmax(140px, auto); 
+}
+        .card { 
+    background-color: var(--c-card); 
+    border: 1px solid rgba(255, 255, 255, 0.05); /* Border halus biar ga tajam dimata */
+    border-radius: 24px; /* Radius lebih besar = lebih modern/manjain mata */
+    padding: 24px; 
+    
+    /* INI KUNCI FLEXBOX DI DALAM GRID */
+    display: flex; 
+    flex-direction: column; 
+    justify-content: space-between; /* Dorong judul ke atas, isi ke tengah/bawah */
+    
+    position: relative; 
+    overflow: hidden; 
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2); /* Shadow lembut */
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+        .card:hover { 
+    transform: translateY(-5px); 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    border-color: var(--c-accent); 
+}
+
+/* --- UTILITY CLASSES UNTUK GRID --- */
+.span-1 { grid-column: span 1; } 
+.span-2 { grid-column: span 2; } 
+.span-3 { grid-column: span 3; } 
+.span-4 { grid-column: span 4; } 
+.row-2 { grid-row: span 2; }
 
         .span-1 { grid-column: span 1; } .span-2 { grid-column: span 2; } .span-3 { grid-column: span 3; } .span-4 { grid-column: span 4; } .row-2 { grid-row: span 2; } 
         @media (max-width: 900px) { .grid-wrapper { grid-template-columns: repeat(2, 1fr); } .span-1, .span-2, .span-3, .span-4 { grid-column: span 2; } .row-2 { grid-row: auto; } }
+/* --- RESPONSIF (BIAR GA PUSING DI HP) --- */
+@media (max-width: 1024px) { 
+    /* Tablet: Jadi 2 Kolom */
+    .grid-wrapper { grid-template-columns: repeat(2, 1fr); }
+    .span-1 { grid-column: span 1; }
+    .span-2, .span-3, .span-4 { grid-column: span 2; } /* Card lebar dimentokin */
+}
 
+@media (max-width: 600px) { 
+    /* HP: Jadi 1 Kolom (Stack ke bawah semua) */
+    .grid-wrapper { grid-template-columns: 1fr; gap: 16px; }
+    
+    /* Semua card dipaksa jadi full width di HP biar isinya lega */
+    .span-1, .span-2, .span-3, .span-4 { grid-column: span 1; } 
+    
+    /* Reset row span di HP biar urutannya ga loncat aneh */
+    .row-2 { grid-row: auto; }
+}
         .label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1.5px; color: #aebcc9; margin-bottom: 15px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
         .value { font-size: 2rem; font-weight: 800; color: var(--c-highlight); line-height: 1.1; word-break: break-word; }
         .sub-value { font-size: 1rem; color: var(--c-text); opacity: 0.9; margin-top: 5px; font-weight: 600; }
