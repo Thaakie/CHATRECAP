@@ -77,14 +77,53 @@ class ChatController extends Controller
         $stopwords = ['yang', 'dan', 'di', 'ke', 'dari', 'ini', 'itu', 'aku', 'kamu', 'dia', 'kita', 'mereka', 'untuk', 'pada', 'adalah', 'sebagai', 'dengan', 'juga', 'karena', 'bahwa', 'tetapi', 'namun', 'atau', 'sudah', 'telah', 'sedang', 'akan', 'bisa', 'ada', 'tidak', 'tak', 'gak', 'ya', 'yah', 'ok', 'oke', 'yg', 'kalo', 'kalau', 'aja', 'saja', 'kok', 'sih', 'dong', 'deh', 'kan', 'mah', 'omitted', 'media', 'image', 'sticker', 'video', 'null', 'pesan', 'dihapus', 'missed', 'call', 'berakhir', 'hai', 'halo', 'bro', 'sis', 'kak', 'mas', 'mbak', 'pak', 'bu', 'dok', 'teruskan', 'forwarded', 'https', 'http', 'com', 'www', 'tuh', 'nih', 'deh', 'lah', 'doang', 'banget', 'bgt', 'gw', 'gue', 'lu', 'lo', 'apa', 'kenapa', 'gimana', 'kapan', 'tapi', 'bukan', 'sama', 'banyak', 'mau', 'ga', 'nggak', 'belom', 'belum'];
 
         $posWords = ['wkwk', 'haha', 'mantap', 'keren', 'makasih', 'love', 'bagus', 'selamat', 'alhamdulillah', 'gas', 'ayo', 'suka', 'rindu', 'kangen', 'baik', 'siap', 'oke', 'yoi', 'asik', 'bestie', 'gokil', 'wkwkwk'];
-        $negWords = ['anjing', 'babi', 'bangsat', 'tolol', 'bodoh', 'sedih', 'sakit', 'kesel', 'marah', 'capek', 'pusing', 'males', 'gila', 'stres', 'kampret', 'sial', 'benci', 'ribut', 'emosi', 'tai', 'setan', 'fuck', 'shit'];
-        $holyWords = ['maaf', 'makasih', 'terima kasih', 'tolong', 'mohon', 'alhamdulillah', 'insyaallah', 'assalamualaikum', 'syukur', 'sabar', 'amin', 'aamiin', 'semoga', 'nuhun', 'punten'];
+        $negWords = ['anjing', 'babi', 'bangsat', 'tolol', 'bodoh', 'sedih', 'gila', 'stres', 'kampret', 'sial', 'benci', 'tai', 'setan', 'fuck', 'shit'];
+        $holyWords = ['maaf', 'makasih', 'terima kasih', 'tolong', 'mohon', 'alhamdulillah', 'insyaallah', 'assalamualaikum', 'syukur', 'sabar', 'amin', 'aamiin', 'semoga', 'nuhun', 'punten', 'shalom'];
         
         $topics = [
-            'edukasi' => ['tugas', 'kelas', 'deadline', 'dosen', 'kuliah', 'kelompok', 'ppt', 'pdf', 'ujian', 'kumpul', 'absensi', 'presentasi'],
-            'receh' => ['wkwk', 'haha', 'xixi', 'ngakak', 'meme', 'lucu', 'lol', 'receh', 'kocak', 'awokwok', 'bjir'],
-            'deep' => ['hidup', 'capek', 'masa depan', 'nikah', 'kerja', 'sedih', 'maaf', 'berjuang', 'harapan', 'takut', 'perasaan', 'nangis'],
-            'gosip' => ['dia', 'si itu', 'tau gak', 'ternyata', 'katanya', 'mantan', 'pacar', 'putus', 'jadian', 'spill', 'hot news']
+            'edukasi' => [
+                // Formal & Akademik
+                'tugas', 'kelas', 'deadline', 'dosen', 'kuliah', 'kelompok', 'ppt', 'pdf', 'ujian', 
+                'kumpul', 'absensi', 'presentasi', 'skripsi', 'makalah', 'jurnal', 'revisi', 'sidang', 
+                'wisuda', 'semester', 'ipk', 'beasiswa', 'magang', 'praktikum', 'laporan', 'materi', 
+                'bimbingan', 'proposal', 'krs', 'ukt', 'zoom', 'gmeet', 'link', 'drive',
+                // Informal & Singkatan
+                'matkul', 'dosbing', 'kating', 'maba', 'sempro', 'semhas', 'acc', 'bab', 'revisian', 
+                'joki', 'copas', 'tubes', 'laprak', 'aslab', 'modul', 'kampus', 'resum', 'kuis', 'uts', 'uas'
+            ],
+            'receh' => [
+                // Ketawa Variatif
+                'wkwk', 'haha', 'xixi', 'ngakak', 'awokwok', 'hwhw', 'wkakaka', 'akwoak', 'wkkw',
+                // Slang Lucu & Reaksi
+                'meme', 'lucu', 'lol', 'receh', 'kocak', 'bjir', 'anjir', 'njir', 'anjay', 'gokil', 
+                'lawak', 'bengek', 'random', 'gajelas', 'gj', 'stress', 'stres', 'gelo', 'sableng', 
+                'dark', 'joke', 'humor', 'kering', 'ytta', 'lmao', 'rofl', 'xd', 'bengek', 'capek bgt'
+            ],
+            'deep' => [
+                // Perasaan & Mental
+                'hidup', 'capek', 'masa depan', 'nikah', 'kerja', 'sedih', 'maaf', 'berjuang', 
+                'harapan', 'takut', 'perasaan', 'nangis', 'capee', 'kecewa', 'hampa', 'kosong', 
+                'rindu', 'kangen', 'sepi', 'sendiri', 'lelah', 'nyerah', 'gagal', 'beban', 'mental', 
+                'overthinking', 'ovt', 'insecure', 'healing', 'burnout', 'depresi', 'cemas', 'ikhlas',
+                // Serius & Dewasa
+                'tuhan', 'doa', 'sabar', 'dewasa', 'ortu', 'keluarga', 'rumah', 'rantau', 'sukses', 
+                'karir', 'gaji', 'resign', 'duit', 'uang', 'nabung', 'biaya', 'tanggung jawab'
+            ],
+            'gosip' => [
+                // Hubungan & Status
+                'dia', 'si itu', 'doi', 'crush', 'gebetan', 'pacar', 'mantan', 'kekasih', 'ayang', 
+                'bebeb', 'jadian', 'putus', 'balikan', 'jomblo', 'single', 'taken', 'nikah', 'lamaran',
+                'jodoh', 'partner', 'suami', 'istri', 'couple', 'pasangan',
+                
+                // Dinamika Perasaan (Gen Z & Umum)
+                'cinta', 'sayang', 'kangen', 'rindu', 'bucin', 'galau', 'gamon', 'ilfeel', 'salting',
+                'ghosting', 'friendzone', 'hts', 'red flag', 'green flag', 'butterfly era', 'selingkuh', 
+                'nikung', 'peka', 'kode', 'confess', 'fomo', 'tarik ulur', 'patah hati', 'move on',
+                
+                // Drama & Cerita (Tanpa kata kasar)
+                'spill', 'cerita', 'curhat', 'deep talk', 'drama', 'screenshot', 'ss', 'pap', 
+                'bohong', 'jujur', 'rahasia', 'ketahuan', 'cekcok', 'berantem', 'baikan', 'maaf'
+            ]
         ];
 
 // --- STEP 1: PARSING & NORMALIZATION ---

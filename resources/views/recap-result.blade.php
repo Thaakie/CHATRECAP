@@ -311,10 +311,10 @@
             <div class="card span-2">
                 <div class="label"><span class="icon">📊</span> Isi Otak Grup Ini</div>
                 <div class="topic-row">
-                    <div class="topic-item"><span class="topic-val">{{ $topicStats['edukasi'] }}</span><span class="topic-lbl">Tugas</span></div>
-                    <div class="topic-item"><span class="topic-val">{{ $topicStats['receh'] }}</span><span class="topic-lbl">Meme</span></div>
-                    <div class="topic-item"><span class="topic-val">{{ $topicStats['deep'] }}</span><span class="topic-lbl">Galau</span></div>
-                    <div class="topic-item"><span class="topic-val">{{ $topicStats['gosip'] }}</span><span class="topic-lbl">Gibah</span></div>
+                    <div class="topic-item"><span class="topic-val">{{ $topicStats['edukasi'] }}</span><span class="topic-lbl">Edukasi</span></div>
+                    <div class="topic-item"><span class="topic-val">{{ $topicStats['receh'] }}</span><span class="topic-lbl">Receh</span></div>
+                    <div class="topic-item"><span class="topic-val">{{ $topicStats['deep'] }}</span><span class="topic-lbl">Deep</span></div>
+                    <div class="topic-item"><span class="topic-val">{{ $topicStats['gosip'] }}</span><span class="topic-lbl">romansa</span></div>
                 </div>
             </div>
 
