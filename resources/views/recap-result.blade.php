@@ -3,10 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Wrapped Ultimate</title>
+    <title>Chat Wrapped</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Fredoka:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="icon" href="{{ asset('pets.png') }}" type="image/png">
+    <link rel="apple-touch-icon" href="{{ asset('pets.png') }}">
 
     <style>
         /* COLOR PALETTE (Dark Blue Theme) */
