@@ -101,6 +101,34 @@ class ChatController extends Controller
             $line = trim($line);
             if (empty($line)) continue;
 
+            // 1.5 DETEKSI FORMAT AM/PM (Dengan Koma & Unicode Space)
+            // Pola: 6/29/25, 7:22 PM - Name: Message
+            elseif (preg_match('/^(\d{1,2}\/\d{1,2}\/\d{2,4}),?\s+(\d{1,2}:\d{2}.*?)\s-\s(.*)$/u', $line, $m)) {
+                
+                $dateRaw = $m[1];
+                // Bersihkan karakter unicode 'Narrow No-Break Space' (\u{202F}) yang bikin error
+                // Kita ganti semua karakter aneh di jam dengan spasi biasa
+                $timeRaw = preg_replace('/[^\x20-\x7E]/', ' ', $m[2]); 
+                $body    = $m[3]; 
+
+                // Cek pesan enkripsi sistem (skip)
+                if (str_contains($body, 'Messages and calls are end-to-end encrypted')) continue;
+
+                // Cek Chat beneran (Ada tanda ": ")
+                if (preg_match('/^(.*?):\s(.*)$/', $body, $msgMatch)) {
+                    if ($buffer) $chatData[] = $buffer;
+
+                    $buffer = [
+                        'dateRaw' => $dateRaw,
+                        'timeRaw' => $timeRaw,
+                        'sender'  => trim($msgMatch[1]),
+                        'text'    => trim($msgMatch[2]),
+                        'format'  => 'wa_ampm' // Penanda format baru
+                    ];
+                }
+            }
+            // [TAMBAHAN BARU SELESAI]
+
             // 1. DETEKSI FORMAT UTAMA (HP KAMU)
             // Pola: 21/06/24 19.22 - Nama: Pesan
             // Regex ini menangkap: (Tanggal) (Jam.Menit) - (Sisanya)

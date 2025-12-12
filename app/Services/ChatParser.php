@@ -3,127 +3,152 @@
 namespace App\Services;
 
 use Carbon\Carbon;
-use Illuminate\Support\Str;
 
 class ChatParser
 {
     /**
-     * Main Entry Point: Terima File -> Keluar Array Pesan Standar
+     * Daftar Pola Regex untuk mendeteksi baris baru chat.
+     * Urutan penting: Dari yang paling spesifik ke yang umum.
      */
+    private $patterns = [
+        // 1. FORMAT CUSTOM (Sesuai request kamu sebelumnya)
+        // Contoh: blackiee - 23/04/2025 20:41
+        'custom' => [
+            'regex' => '/^(.*?)\s-\s(\d{2}[\/\.]\d{2}[\/\.]\d{4})\s(\d{2}[:\.]\d{2})$/',
+            'map'   => ['sender' => 1, 'date' => 2, 'time' => 3, 'text' => null] // Text null artinya ada di baris berikutnya
+        ],
+
+        // 2. WHATSAPP IOS / BRACKET (Dengan atau tanpa detik)
+        // Contoh: [21/06/24 19.22.10] Sajid: Halo
+        // Contoh: [6/21/24, 7:22 PM] Sajid: Halo
+        'wa_bracket' => [
+            'regex' => '/^\[(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}),?\s+(\d{1,2}[:\.]\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\]\s*(.*?):\s*(.*)$/',
+            'map'   => ['date' => 1, 'time' => 2, 'sender' => 3, 'text' => 4]
+        ],
+
+        // 3. WHATSAPP ANDROID / STANDARD (Format Indo/UK)
+        // Contoh: 21/06/24 19.22 - Sajid: Halo
+        // Contoh: 6/21/24, 7:22 PM - Sajid: Halo
+        'wa_standard' => [
+            'regex' => '/^(\d{1,2}[\/\.-]\d{1,2}[\/\.-]\d{2,4}),?\s+(\d{1,2}[:\.]\d{2}(?::\d{2})?(?:\s?[APap][Mm])?)\s*-\s*(.*?):\s*(.*)$/',
+            'map'   => ['date' => 1, 'time' => 2, 'sender' => 3, 'text' => 4]
+        ],
+
+        // 4. LINE CHAT EXPORT
+        // Contoh: 19:22 Sajid Halo (Biasanya didahului header tanggal, tapi ini basic parsing per baris)
+        // Format Line agak tricky karena tanggalnya beda baris, tapi kita coba tangkap pola waktu + tab/spasi + nama
+        'line_basic' => [
+            'regex' => '/^(\d{1,2}:\d{2})\s+([^\t\n]+)[\t\s](.*)$/',
+            'map'   => ['time' => 1, 'sender' => 2, 'text' => 3, 'date' => 'CONTEXT_DATE'] // Perlu logika khusus
+        ],
+    ];
+
     public function parse($file)
     {
         $mime = $file->getMimeType();
         $extension = $file->getClientOriginalExtension();
         $path = $file->getRealPath();
 
-        // 1. DETEKSI BERDASARKAN EKSTENSI
         if ($extension === 'json' || $mime === 'application/json') {
             return $this->parseJson($path);
         } else {
-            // Default TXT (WhatsApp / Line / Custom)
             return $this->parseTxt($path);
         }
     }
 
-    /**
-     * Penanganan File Text (WhatsApp / Custom Format)
-     * Menggunakan sistem BUFFER untuk menangani pesan multi-baris
-     */
     private function parseTxt($path)
     {
         $content = file_get_contents($path);
-        
-        // AUTO-FIX ENCODING
+        // Fix encoding
         $content = mb_convert_encoding($content, 'UTF-8', 'UTF-8');
+        // Split lines
         $lines = preg_split('/\r\n|\r|\n/', $content);
 
         $messages = [];
-        $buffer = null; // Variabel penampung sementara
+        $buffer = null;
+        $contextDate = Carbon::now()->format('Y-m-d'); // Default untuk format chat yang tidak punya tanggal di tiap baris (spt Line)
 
         foreach ($lines as $line) {
             $line = $this->cleanLine($line);
             if (empty($line)) continue;
 
-            // --- A. DETEKSI FORMAT CUSTOM (Format Screenshot Kamu) ---
-            // Pola: Nama - dd/mm/yyyy HH:mm (Di baris sendiri)
-            // Contoh: blackiee - 23/04/2025 20:41
-            if (preg_match('/^(.*?)\s-\s(\d{2}\/\d{2}\/\d{4})\s(\d{2}:\d{2})$/', $line, $m)) {
-                // Simpan pesan sebelumnya ke array jika ada
-                if ($buffer) $messages[] = $buffer;
-
-                // Buat buffer baru
-                $buffer = [
-                    'ts' => Carbon::parse($m[2] . ' ' . $m[3]),
-                    'sender' => trim($m[1]),
-                    'text' => '', // Teks akan diisi di loop selanjutnya (baris bawahnya)
-                    'platform' => 'custom'
-                ];
+            // Cek Header Tanggal (Khusus LINE Chat atau format yang tanggalnya dipisah)
+            // Contoh Line: 2023.04.23 Sunday
+            if (preg_match('/^(\d{4})[\.\/](\d{1,2})[\.\/](\d{1,2})/', $line, $dateMatch)) {
+                $contextDate = "{$dateMatch[1]}-{$dateMatch[2]}-{$dateMatch[3]}";
+                continue; // Skip baris ini karena cuma header tanggal
             }
 
-            // --- B. DETEKSI WHATSAPP STANDAR ---
-            // Pola: 6/29/25, 7:22 PM - Name: Msg
-            elseif (preg_match('/^(\d{1,2}[\/\.]\d{1,2}[\/\.]\d{2,4}),?\s+(\d{1,2}[:\.]\d{2}(?:\s?[APap][Mm])?)\s*-\s*(.*?):\s*(.*)$/', $line, $m)) {
-                if ($buffer) $messages[] = $buffer;
-                
-                // Normalisasi Waktu (ganti titik jadi titik dua)
-                $timeStr = str_replace('.', ':', $m[2]);
-                $dateStr = str_replace('.', '/', $m[1]);
+            $matched = false;
 
-                try {
+            // LOOP SEMUA POLA REGEX
+            foreach ($this->patterns as $type => $p) {
+                if (preg_match($p['regex'], $line, $m)) {
+                    
+                    // Simpan buffer pesan sebelumnya
+                    if ($buffer) {
+                        $messages[] = $buffer;
+                        $buffer = null;
+                    }
+
+                    // Ekstrak data berdasarkan peta (map)
+                    $dateRaw = ($p['map']['date'] === 'CONTEXT_DATE') ? $contextDate : ($m[$p['map']['date']] ?? null);
+                    $timeRaw = $m[$p['map']['time']] ?? null;
+                    $sender  = trim($m[$p['map']['sender']]);
+                    $text    = isset($p['map']['text']) ? trim($m[$p['map']['text']]) : ''; 
+
+                    // Skip System Messages (Enkripsi, Grup dibuat, dsb)
+                    // Biasanya sender kosong atau mengandung kata kunci sistem jika regex salah tangkap
+                    if ($this->isSystemMessage($sender, $text)) {
+                        $matched = true; // Tandai matched biar ga masuk ke buffer text
+                        break; 
+                    }
+
+                    // Parsing Tanggal & Waktu
+                    try {
+                        $ts = $this->parseDateTime($dateRaw, $timeRaw);
+                    } catch (\Exception $e) {
+                        // Jika gagal parse tanggal, anggap ini bukan header pesan, lanjut loop
+                        continue;
+                    }
+
                     $buffer = [
-                        'ts' => Carbon::parse("$dateStr $timeStr"),
-                        'sender' => trim($m[3]),
-                        'text' => trim($m[4]),
-                        'platform' => 'whatsapp'
+                        'ts'       => $ts,
+                        'sender'   => $sender,
+                        'text'     => $text,
+                        'platform' => $type
                     ];
-                } catch (\Exception $e) { $buffer = null; }
+
+                    $matched = true;
+                    break; // Keluar dari loop patterns, lanjut baris berikutnya
+                }
             }
 
-            // --- C. DETEKSI WHATSAPP BRACKET ---
-            // Pola: [21/06/24 19.22] Name: Msg
-            elseif (preg_match('/^\[(\d{1,2}[\/\.]\d{1,2}[\/\.]\d{2,4}),?\s+(\d{1,2}[:\.]\d{2}(?::\d{2})?)\]\s*(.*?):\s*(.*)$/', $line, $m)) {
-                if ($buffer) $messages[] = $buffer;
-
-                $timeStr = str_replace('.', ':', $m[2]);
-                $dateStr = str_replace('.', '/', $m[1]);
-
-                try {
-                    $buffer = [
-                        'ts' => Carbon::parse("$dateStr $timeStr"),
-                        'sender' => trim($m[3]),
-                        'text' => trim($m[4]),
-                        'platform' => 'whatsapp'
-                    ];
-                } catch (\Exception $e) { $buffer = null; }
-            }
-
-            // --- D. ISI KONTEN PESAN (Multi-line / Sambungan) ---
-            elseif ($buffer) {
-                // Filter pesan sistem (Optional)
+            // JIKA TIDAK COCOK DENGAN POLA APAPUN -> APPEND KE BUFFER (MULTILINE)
+            if (!$matched && $buffer) {
+                // Handle pesan "omitted"
                 if (str_contains($line, 'sticker omitted') || str_contains($line, 'Media tidak disertakan')) {
                     $line = "<Sticker>";
                 } elseif (str_contains($line, 'image omitted')) {
                     $line = "<Image>";
                 }
 
-                // Gabungkan dengan teks di buffer
-                // Jika buffer teks masih kosong (format custom), jangan tambah spasi di awal
                 if (empty($buffer['text'])) {
                     $buffer['text'] = $line;
                 } else {
-                    $buffer['text'] .= " " . $line;
+                    $buffer['text'] .= "\n" . $line; // Pakai \n biar format paragraf terjaga
                 }
             }
         }
 
-        // Jangan lupa masukkan pesan terakhir yang tersisa di buffer
+        // Simpan pesan terakhir
         if ($buffer) $messages[] = $buffer;
 
         return $messages;
     }
 
     /**
-     * Penanganan File JSON (Telegram / Discord)
+     * Helper: Parse JSON (Telegram/Discord) - Tidak banyak berubah
      */
     private function parseJson($path)
     {
@@ -131,44 +156,43 @@ class ChatParser
         $data = json_decode($content, true);
         $messages = [];
 
-        // TELEGRAM EXPORT DETECTOR
-        if (isset($data['name']) && isset($data['messages'])) {
+        // TELEGRAM
+        if (isset($data['messages'])) {
             foreach ($data['messages'] as $msg) {
-                if ($msg['type'] !== 'message') continue; 
-
+                if ($msg['type'] !== 'message') continue;
+                
+                $sender = $msg['from'] ?? $msg['actor'] ?? 'Unknown';
+                $textRaw = $msg['text'];
                 $text = '';
-                if (is_array($msg['text'])) {
-                    foreach ($msg['text'] as $part) {
+                
+                if (is_array($textRaw)) {
+                    foreach ($textRaw as $part) {
                         $text .= is_array($part) ? ($part['text'] ?? '') : $part;
                     }
                 } else {
-                    $text = $msg['text'];
+                    $text = (string)$textRaw;
                 }
 
-                $sender = $msg['from'] ?? $msg['actor'] ?? 'Unknown';
-
-                if (empty($text) && isset($msg['media_type'])) {
-                    $text = "<Media: {$msg['media_type']}>"; 
-                }
+                if (empty($text) && isset($msg['media_type'])) $text = "<Media: {$msg['media_type']}>";
 
                 try {
                     $messages[] = [
                         'ts' => Carbon::parse($msg['date']),
                         'sender' => $sender,
-                        'text' => (string) $text,
+                        'text' => $text,
                         'platform' => 'telegram'
                     ];
-                } catch (\Exception $e) { continue; }
+                } catch (\Exception $e) {}
             }
         }
-        
-        // DISCORD EXPORT DETECTOR
-        elseif (isset($data[0]['author']) && isset($data[0]['content'])) {
+        // DISCORD
+        elseif (is_array($data)) {
             foreach ($data as $msg) {
+                if (!isset($msg['timestamp'])) continue;
                 $messages[] = [
                     'ts' => Carbon::parse($msg['timestamp']),
                     'sender' => $msg['author']['name'] ?? 'Unknown',
-                    'text' => $msg['content'],
+                    'text' => $msg['content'] ?? '',
                     'platform' => 'discord'
                 ];
             }
@@ -177,12 +201,65 @@ class ChatParser
         return $messages;
     }
 
+    /**
+     * Helper: Bersihkan String
+     */
     private function cleanLine($line)
     {
         $line = trim($line);
-        // Hapus Invisible Characters & Control Chars
         $line = preg_replace('/[\x00-\x1F\x7F\xA0]/u', ' ', $line);
-        $line = str_replace(["\u{202f}", "\u{00a0}", "\u{200e}", "\u{200f}"], ' ', $line);
-        return $line;
+        return str_replace(["\u{202f}", "\u{00a0}", "\u{200e}", "\u{200f}"], ' ', $line);
+    }
+
+    /**
+     * Helper: Cerdas Parse Tanggal & Waktu
+     */
+    private function parseDateTime($dateStr, $timeStr)
+    {
+        // Normalisasi separator: ganti titik dengan titik dua untuk waktu, dsb.
+        $timeStr = str_replace('.', ':', $timeStr); 
+        $dateStr = str_replace(['.', '-'], '/', $dateStr);
+        
+        // Gabung
+        $fullString = "$dateStr $timeStr";
+
+        // Coba parse dengan Carbon secara fleksibel
+        // Carbon cukup pintar menangani "21/06/24" vs "6/21/24" tergantung locale, 
+        // tapi kadang perlu dipaksa formatnya jika error.
+        try {
+            return Carbon::parse($fullString);
+        } catch (\Exception $e) {
+            // Fallback manual jika format US (mm/dd/yy) gagal di parse sbg (dd/mm/yy)
+            return Carbon::createFromFormat('m/d/y H:i', $fullString);
+        }
+    }
+
+    /**
+     * Helper: Filter Pesan Sistem WhatsApp
+     */
+    private function isSystemMessage($sender, $text)
+    {
+        // Pesan enkripsi tidak punya sender di pola bracket tertentu, 
+        // atau sender-nya adalah teks enkripsi itu sendiri
+        $keywords = [
+            'Messages and calls are end-to-end encrypted',
+            'Pesan dan panggilan terenkripsi',
+            'created group',
+            'membuat grup',
+            'added',
+            'menambahkan',
+            'left',
+            'keluar',
+            'changed',
+            'mengubah'
+        ];
+
+        // Jika sender mengandung kata kerja sistem (kasus WA Android kadang: "Anda mengubah ikon...")
+        foreach ($keywords as $k) {
+            if (stripos($sender, $k) !== false || stripos($text, $k) !== false) {
+                return true;
+            }
+        }
+        return false;
     }
 }
